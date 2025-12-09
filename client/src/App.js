@@ -25,7 +25,7 @@ function App() {
     const token = getToken();
     if (token) {
       // Verify token with backend
-      fetch('http://localhost:5001/api/auth/verify', {
+      fetch('https://knko-fr.onrender.com/api/auth/verify', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
