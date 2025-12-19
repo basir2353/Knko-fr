@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './PractitionerDashboard.css';
 import { getToken, removeToken } from '../utils/secureStorage';
 import { initSocket, disconnectSocket } from '../utils/socket';
+import config from '../utils/config';
 
 const PractitionerDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('upcoming');
@@ -115,7 +116,7 @@ const PractitionerDashboard = ({ user, onLogout }) => {
               try {
                 const token = getToken();
                 if (token) {
-                  await fetch('https://knko-fr.onrender.com/api/auth/logout', {
+                  await fetch(`${config.API_BASE_URL}/api/auth/logout`, {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${token}`

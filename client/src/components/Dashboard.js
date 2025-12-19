@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import { getToken, removeToken } from '../utils/secureStorage';
 import { initSocket, disconnectSocket } from '../utils/socket';
+import config from '../utils/config';
 
 const Dashboard = ({ user, onLogout }) => {
   const [availability, setAvailability] = useState([]);
@@ -44,7 +45,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
+      const response = await fetch(`${config.API_BASE_URL}/api/practitioner/availability`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -69,7 +70,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/all', {
+      const response = await fetch(`${config.API_BASE_URL}/api/practitioner/all`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -131,7 +132,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
+      const response = await fetch(`${config.API_BASE_URL}/api/practitioner/availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,7 +180,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch(`https://knko-fr.onrender.com/api/practitioner/availability/${id}`, {
+      const response = await fetch(`${config.API_BASE_URL}/api/practitioner/availability/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './Auth.css';
 import { setToken } from '../utils/secureStorage';
 import { initSocket } from '../utils/socket';
+import config from '../utils/config';
 
 const Login = ({ onLogin, onSwitchToSignup }) => {
   const [formData, setFormData] = useState({
@@ -26,7 +27,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('https://knko-fr.onrender.com/api/auth/login', {
+      const response = await fetch(`${config.API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

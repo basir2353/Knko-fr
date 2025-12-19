@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import PractitionerDashboard from './components/PractitionerDashboard';
 import { getToken, removeToken } from './utils/secureStorage';
 import { initSocket, disconnectSocket } from './utils/socket';
+import config from './utils/config';
 
 function App() {
   const [currentView, setCurrentView] = useState('login');
@@ -20,7 +21,7 @@ function App() {
     try {
       const token = getToken();
       if (token) {
-        await fetch('https://knko-fr.onrender.com/api/auth/logout', {
+        await fetch(`${config.API_BASE_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -42,7 +43,7 @@ function App() {
     const token = getToken();
     if (token) {
       // Verify token with backend
-      fetch('https://knko-fr.onrender.com/api/auth/verify', {
+      fetch(`${config.API_BASE_URL}/api/auth/verify`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
