@@ -12,24 +12,44 @@ const PractitionerDashboard = ({ user, onLogout }) => {
     if (user?.userType !== 'practitioner') return;
 
     const socket = initSocket();
-
-    // Send heartbeat via socket immediately
+    
+    // Wait for socket to connect before sending heartbeat
     const sendHeartbeat = () => {
-      if (socket.connected && user?.id) {
+      const userId = user.id || user.userId;
+      if (!userId) {
+        console.warn('Cannot send heartbeat: user ID not found', user);
+        return;
+      }
+      
+      if (socket.connected) {
+        console.log('Sending practitioner heartbeat for user:', userId);
         socket.emit('practitioner:heartbeat', {
-          userId: user.id
+          userId: userId
         });
+      } else {
+        console.warn('Socket not connected, cannot send heartbeat');
+        // Try to reconnect
+        socket.connect();
       }
     };
 
-    // Send heartbeat immediately
-    sendHeartbeat();
+    // Send heartbeat when socket connects
+    socket.on('connect', () => {
+      console.log('Socket connected, sending initial heartbeat');
+      sendHeartbeat();
+    });
+
+    // Send heartbeat immediately if already connected
+    if (socket.connected) {
+      sendHeartbeat();
+    }
 
     // Send heartbeat every 2 minutes to keep session active
     const heartbeatInterval = setInterval(sendHeartbeat, 2 * 60 * 1000);
 
     return () => {
       clearInterval(heartbeatInterval);
+      socket.off('connect');
       // Don't disconnect socket here as it might be used by other components
     };
   }, [user]);

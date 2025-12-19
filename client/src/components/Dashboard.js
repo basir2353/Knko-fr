@@ -99,7 +99,7 @@ const Dashboard = ({ user, onLogout }) => {
       const socket = initSocket();
       
       // Listen for practitioner status updates
-      socket.on('practitioner:status', (data) => {
+      const handleStatusUpdate = (data) => {
         console.log('Received practitioner status update:', data);
         setPractitioners(prevPractitioners => {
           return prevPractitioners.map(practitioner => {
@@ -113,10 +113,20 @@ const Dashboard = ({ user, onLogout }) => {
             return practitioner;
           });
         });
-      });
+      };
+      
+      socket.on('practitioner:status', handleStatusUpdate);
+      
+      // Refresh practitioners list periodically to ensure we have latest status
+      // This is a fallback in case socket updates are missed
+      const refreshInterval = setInterval(() => {
+        console.log('Refreshing practitioners list...');
+        fetchPractitioners();
+      }, 5 * 60 * 1000); // Every 5 minutes
 
       return () => {
-        socket.off('practitioner:status');
+        socket.off('practitioner:status', handleStatusUpdate);
+        clearInterval(refreshInterval);
         // Don't disconnect socket as it might be used by other components
       };
     }
