@@ -343,7 +343,45 @@ router.delete('/availability/:id', authenticateToken, isPractitioner, (req, res)
   }
 });
 
-// Get all practitioners with their availability (for admin and users)
+// Heartbeat endpoint for practitioners to update their active status (kept for HTTP fallback)
+router.post('/heartbeat', authenticateToken, isPractitioner, (req, res) => {
+  try {
+    const practitionerId = req.user.userId;
+    const db = getDatabase();
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('user-agent') || 'Unknown';
+
+    // Update last activity timestamp, or insert if doesn't exist
+    db.run(
+      `INSERT OR REPLACE INTO active_sessions (userId, lastActivity, ipAddress, userAgent)
+       VALUES (?, CURRENT_TIMESTAMP, ?, ?)`,
+      [practitionerId, ipAddress, userAgent],
+      function(err) {
+        if (err) {
+          console.error('Error updating heartbeat:', err);
+          return res.status(500).json({ error: 'An error occurred' });
+        }
+        
+        // Emit socket event for real-time update
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('practitioner:status', {
+            userId: practitionerId,
+            isActive: true,
+            lastActivity: new Date().toISOString()
+          });
+        }
+        
+        res.json({ message: 'Heartbeat updated' });
+      }
+    );
+  } catch (error) {
+    console.error('Heartbeat error:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Get all practitioners with their availability and active status (for admin and users)
 router.get('/all', authenticateToken, (req, res) => {
   try {
     const db = getDatabase();
@@ -390,6 +428,8 @@ router.get('/all', authenticateToken, (req, res) => {
         }
 
         const placeholders = practitionerIds.map(() => '?').join(',');
+        
+        // Get availability
         db.all(
           `SELECT * FROM practitioner_availability 
            WHERE practitionerId IN (${placeholders})
@@ -410,41 +450,72 @@ router.get('/all', authenticateToken, (req, res) => {
               return res.status(500).json({ error: 'An error occurred' });
             }
 
-            // Group availability by practitioner
-            const availabilityMap = {};
-            availabilityRows.forEach(avail => {
-              if (!availabilityMap[avail.practitionerId]) {
-                availabilityMap[avail.practitionerId] = [];
+            // Get active sessions - check for sessions active in last 5 minutes
+            db.all(
+              `SELECT userId, lastActivity, createdAt 
+               FROM active_sessions 
+               WHERE userId IN (${placeholders})
+               AND datetime(lastActivity) > datetime('now', '-5 minutes')`,
+              practitionerIds,
+              (err, activeSessions) => {
+                if (err) {
+                  console.error('Error fetching active sessions:', err);
+                  // Continue without active status if there's an error
+                  activeSessions = [];
+                } else {
+                  console.log(`Found ${activeSessions ? activeSessions.length : 0} active practitioners`);
+                }
+
+                // Create map of active practitioners
+                const activeMap = {};
+                if (activeSessions && activeSessions.length > 0) {
+                  activeSessions.forEach(session => {
+                    activeMap[session.userId] = {
+                      isActive: true,
+                      lastActivity: session.lastActivity
+                    };
+                  });
+                }
+
+                // Group availability by practitioner
+                const availabilityMap = {};
+                availabilityRows.forEach(avail => {
+                  if (!availabilityMap[avail.practitionerId]) {
+                    availabilityMap[avail.practitionerId] = [];
+                  }
+                  availabilityMap[avail.practitionerId].push({
+                    id: avail.id,
+                    dayOfWeek: avail.dayOfWeek,
+                    startTime: avail.startTime,
+                    endTime: avail.endTime
+                  });
+                });
+
+                // Combine practitioners with their availability and active status
+                const practitionersWithAvailability = practitioners.map(practitioner => ({
+                  id: practitioner.id,
+                  firstName: practitioner.firstName,
+                  lastName: practitioner.lastName,
+                  email: practitioner.email,
+                  availability: availabilityMap[practitioner.id] || [],
+                  isActive: activeMap[practitioner.id]?.isActive || false,
+                  lastActivity: activeMap[practitioner.id]?.lastActivity || null
+                }));
+
+                AuditLogger.log({
+                  userId,
+                  userType,
+                  action: 'VIEW_PRACTITIONERS',
+                  resource: '/api/practitioner/all',
+                  ipAddress,
+                  userAgent,
+                  status: 'SUCCESS',
+                  details: `Viewed ${practitionersWithAvailability.length} practitioners`
+                });
+
+                res.json({ practitioners: practitionersWithAvailability });
               }
-              availabilityMap[avail.practitionerId].push({
-                id: avail.id,
-                dayOfWeek: avail.dayOfWeek,
-                startTime: avail.startTime,
-                endTime: avail.endTime
-              });
-            });
-
-            // Combine practitioners with their availability
-            const practitionersWithAvailability = practitioners.map(practitioner => ({
-              id: practitioner.id,
-              firstName: practitioner.firstName,
-              lastName: practitioner.lastName,
-              email: practitioner.email,
-              availability: availabilityMap[practitioner.id] || []
-            }));
-
-            AuditLogger.log({
-              userId,
-              userType,
-              action: 'VIEW_PRACTITIONERS',
-              resource: '/api/practitioner/all',
-              ipAddress,
-              userAgent,
-              status: 'SUCCESS',
-              details: `Viewed ${practitionersWithAvailability.length} practitioners`
-            });
-
-            res.json({ practitioners: practitionersWithAvailability });
+            );
           }
         );
       }

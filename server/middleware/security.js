@@ -8,11 +8,15 @@ const helmet = require('helmet');
 /**
  * Rate limiting for authentication endpoints
  * Prevents brute force attacks
+ * More lenient in development mode
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
-  message: 'Too many authentication attempts, please try again later.',
+  max: process.env.NODE_ENV === 'production' ? 5 : 20, // More lenient in development
+  message: {
+    error: 'Too many authentication attempts. Please wait 15 minutes before trying again.',
+    retryAfter: '15 minutes'
+  },
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Don't count successful requests

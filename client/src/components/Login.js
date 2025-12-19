@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './Auth.css';
 import { setToken } from '../utils/secureStorage';
+import { initSocket } from '../utils/socket';
 
 const Login = ({ onLogin, onSwitchToSignup }) => {
   const [formData, setFormData] = useState({
@@ -25,7 +26,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('https://knko-fr.onrender.com/api/auth/login', {
+      const response = await fetch('http://localhost:5001/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -36,20 +37,50 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
         })
       });
 
-      const data = await response.json();
+      // Handle rate limiting (429) specifically
+      if (response.status === 429) {
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          data = { error: 'Too many login attempts. Please wait 15 minutes before trying again.' };
+        }
+        setError(data.error || data.message || 'Too many login attempts. Please wait 15 minutes before trying again.');
+        return;
+      }
+
+      // Check if response is ok before trying to parse JSON
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // If response is not JSON, check status
+        if (!response.ok) {
+          setError('Server error occurred. Please try again later.');
+          return;
+        }
+        throw parseError;
+      }
 
       if (response.ok) {
         // Use secure storage instead of direct localStorage
         setToken(data.token);
+        // Initialize socket connection after login
+        initSocket();
         onLogin(data.user);
       } else {
         // Generic error message - don't expose specific details
         setError(data.error || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
-      // Don't log sensitive information
-      console.error('Login error occurred');
-      setError('Unable to connect to server. Please try again later.');
+      // More specific error handling
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        console.error('Network error: Server may not be running');
+        setError('Unable to connect to server. Please ensure the server is running on port 5001.');
+      } else {
+        console.error('Login error occurred:', err.message);
+        setError('An unexpected error occurred. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }

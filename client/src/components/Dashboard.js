@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import { getToken, removeToken } from '../utils/secureStorage';
+import { initSocket, disconnectSocket } from '../utils/socket';
 
 const Dashboard = ({ user, onLogout }) => {
   const [availability, setAvailability] = useState([]);
@@ -43,7 +44,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
+      const response = await fetch('http://localhost:5001/api/practitioner/availability', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -68,14 +69,17 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/all', {
+      const response = await fetch('http://localhost:5001/api/practitioner/all', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       const data = await response.json();
       if (response.ok) {
+        console.log('Fetched practitioners:', data.practitioners);
         setPractitioners(data.practitioners || []);
+      } else {
+        console.error('Error fetching practitioners:', data);
       }
     } catch (error) {
       console.error('Error fetching practitioners:', error);
@@ -89,6 +93,31 @@ const Dashboard = ({ user, onLogout }) => {
       fetchAvailability();
     } else {
       fetchPractitioners();
+      
+      // Set up Socket.IO for real-time updates (admin/patient view)
+      const socket = initSocket();
+      
+      // Listen for practitioner status updates
+      socket.on('practitioner:status', (data) => {
+        console.log('Received practitioner status update:', data);
+        setPractitioners(prevPractitioners => {
+          return prevPractitioners.map(practitioner => {
+            if (practitioner.id === data.userId) {
+              return {
+                ...practitioner,
+                isActive: data.isActive,
+                lastActivity: data.lastActivity
+              };
+            }
+            return practitioner;
+          });
+        });
+      });
+
+      return () => {
+        socket.off('practitioner:status');
+        // Don't disconnect socket as it might be used by other components
+      };
     }
   }, [user.userType]);
 
@@ -102,7 +131,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
+      const response = await fetch('http://localhost:5001/api/practitioner/availability', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +179,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch(`https://knko-fr.onrender.com/api/practitioner/availability/${id}`, {
+      const response = await fetch(`http://localhost:5001/api/practitioner/availability/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -177,7 +206,13 @@ const Dashboard = ({ user, onLogout }) => {
       <div className="dashboard-card">
         <div className="dashboard-header">
           <h1>Welcome to Dashboard</h1>
-          <button onClick={onLogout} className="logout-btn">
+          <button 
+            onClick={() => {
+              disconnectSocket();
+              onLogout();
+            }} 
+            className="logout-btn"
+          >
             Logout
           </button>
         </div>
@@ -304,7 +339,15 @@ const Dashboard = ({ user, onLogout }) => {
                   {practitioners.map((practitioner) => (
                     <div key={practitioner.id} className="practitioner-card">
                       <div className="practitioner-header">
-                        <h4>{practitioner.firstName} {practitioner.lastName}</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <h4>{practitioner.firstName} {practitioner.lastName}</h4>
+                          {practitioner.isActive && (
+                            <span className="active-status-badge" title="Currently Active">
+                              <span className="active-dot"></span>
+                              Active
+                            </span>
+                          )}
+                        </div>
                         <span className="practitioner-email">{practitioner.email}</span>
                       </div>
                       {practitioner.availability.length > 0 ? (

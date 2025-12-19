@@ -243,6 +243,38 @@ router.post('/login', authLimiter, validateLogin, async (req, res) => {
         { expiresIn: TOKEN_EXPIRATION }
       );
 
+      // If user is a practitioner, mark them as active
+      if (user.userType === 'practitioner') {
+        db.run(
+          `INSERT OR REPLACE INTO active_sessions (userId, lastActivity, ipAddress, userAgent)
+           VALUES (?, CURRENT_TIMESTAMP, ?, ?)`,
+          [user.id, ipAddress, userAgent],
+          function(err) {
+            if (err) {
+              console.error('Error updating active session:', err);
+              // Don't fail login if session tracking fails
+            } else {
+              console.log(`Practitioner ${user.id} marked as active`);
+              // Emit socket event for real-time update
+              const io = req.app.get('io');
+              if (io) {
+                io.emit('practitioner:status', {
+                  userId: user.id,
+                  isActive: true,
+                  lastActivity: new Date().toISOString(),
+                  practitioner: {
+                    id: user.id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email
+                  }
+                });
+              }
+            }
+          }
+        );
+      }
+
       // Log successful login
       AuditLogger.log({
         userId: user.id,
@@ -279,6 +311,71 @@ router.post('/login', authLimiter, validateLogin, async (req, res) => {
       details: 'Server error'
     });
     res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Logout endpoint - mark practitioner as inactive
+router.post('/logout', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent') || 'Unknown';
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const db = getDatabase();
+
+    // If user is a practitioner, mark them as inactive
+    if (decoded.userType === 'practitioner') {
+      db.run(
+        'DELETE FROM active_sessions WHERE userId = ?',
+        [decoded.userId],
+        (err) => {
+          if (err) {
+            console.error('Error removing active session:', err);
+            // Don't fail logout if session removal fails
+          } else {
+            // Emit socket event for real-time update
+            const io = req.app.get('io');
+            if (io) {
+              io.emit('practitioner:status', {
+                userId: decoded.userId,
+                isActive: false,
+                lastActivity: null
+              });
+            }
+          }
+        }
+      );
+    }
+
+    AuditLogger.log({
+      userId: decoded.userId,
+      userType: decoded.userType || 'unknown',
+      action: 'LOGOUT',
+      resource: '/api/auth/logout',
+      ipAddress,
+      userAgent,
+      status: 'SUCCESS',
+      details: 'Logout successful'
+    });
+
+    res.json({ message: 'Logout successful' });
+  } catch (error) {
+    AuditLogger.log({
+      userId: null,
+      userType: 'anonymous',
+      action: 'LOGOUT',
+      resource: '/api/auth/logout',
+      ipAddress,
+      userAgent,
+      status: 'FAILURE',
+      details: 'Invalid or expired token'
+    });
+    res.status(401).json({ error: 'Invalid token' });
   }
 });
 

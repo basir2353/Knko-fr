@@ -108,6 +108,43 @@ const initDatabase = () => {
         console.error('Error creating audit_logs timestamp index:', err.message);
       }
     });
+
+    // Create active_sessions table to track practitioner login status
+    database.run(`
+      CREATE TABLE IF NOT EXISTS active_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ipAddress TEXT,
+        userAgent TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(userId)
+      )
+    `, (err) => {
+      if (err) {
+        console.error('Error creating active_sessions table:', err.message);
+      } else {
+        console.log('Active sessions table created or already exists');
+      }
+    });
+
+    // Create index on active_sessions for better query performance
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_active_sessions_userId ON active_sessions(userId)
+    `, (err) => {
+      if (err) {
+        console.error('Error creating active_sessions index:', err.message);
+      }
+    });
+
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_active_sessions_lastActivity ON active_sessions(lastActivity)
+    `, (err) => {
+      if (err) {
+        console.error('Error creating active_sessions lastActivity index:', err.message);
+      }
+    });
   });
 };
 

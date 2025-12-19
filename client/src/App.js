@@ -3,7 +3,9 @@ import './App.css';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
+import PractitionerDashboard from './components/PractitionerDashboard';
 import { getToken, removeToken } from './utils/secureStorage';
+import { initSocket, disconnectSocket } from './utils/socket';
 
 function App() {
   const [currentView, setCurrentView] = useState('login');
@@ -14,10 +16,25 @@ function App() {
     setCurrentView('dashboard');
   };
 
-  const handleLogout = () => {
-    removeToken();
-    setUser(null);
-    setCurrentView('login');
+  const handleLogout = async () => {
+    try {
+      const token = getToken();
+      if (token) {
+        await fetch('http://localhost:5001/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      disconnectSocket();
+      removeToken();
+      setUser(null);
+      setCurrentView('login');
+    }
   };
 
   // Check if user is already logged in
@@ -25,7 +42,7 @@ function App() {
     const token = getToken();
     if (token) {
       // Verify token with backend
-      fetch('https://knko-fr.onrender.com/api/auth/verify', {
+      fetch('http://localhost:5001/api/auth/verify', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -33,6 +50,8 @@ function App() {
         .then(res => res.json())
         .then(data => {
           if (data.valid) {
+            // Initialize socket connection if user is logged in
+            initSocket();
             setUser(data.user);
             setCurrentView('dashboard');
           } else {
@@ -63,7 +82,11 @@ function App() {
         />
       )}
       {currentView === 'dashboard' && user && (
-        <Dashboard user={user} onLogout={handleLogout} />
+        user.userType === 'practitioner' ? (
+          <PractitionerDashboard user={user} onLogout={handleLogout} />
+        ) : (
+          <Dashboard user={user} onLogout={handleLogout} />
+        )
       )}
     </div>
   );
