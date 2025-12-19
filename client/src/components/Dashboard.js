@@ -44,7 +44,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('http://localhost:5001/api/practitioner/availability', {
+      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -69,7 +69,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('http://localhost:5001/api/practitioner/all', {
+      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/all', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -131,7 +131,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch('http://localhost:5001/api/practitioner/availability', {
+      const response = await fetch('https://knko-fr.onrender.com/api/practitioner/availability', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,7 +179,7 @@ const Dashboard = ({ user, onLogout }) => {
         onLogout();
         return;
       }
-      const response = await fetch(`http://localhost:5001/api/practitioner/availability/${id}`, {
+      const response = await fetch(`https://knko-fr.onrender.com/api/practitioner/availability/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

@@ -20,7 +20,7 @@ function App() {
     try {
       const token = getToken();
       if (token) {
-        await fetch('http://localhost:5001/api/auth/logout', {
+        await fetch('https://knko-fr.onrender.com/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -42,7 +42,7 @@ function App() {
     const token = getToken();
     if (token) {
       // Verify token with backend
-      fetch('http://localhost:5001/api/auth/verify', {
+      fetch('https://knko-fr.onrender.com/api/auth/verify', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
