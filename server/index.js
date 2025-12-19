@@ -51,25 +51,47 @@ app.set('io', io);
 // Trust proxy for accurate IP addresses (important for audit logging)
 app.set('trust proxy', 1);
 
-// Security middleware - must be first
-app.use(securityHeaders);
-
-// CORS configuration - restrict in production
+// CORS configuration - MUST be before other middleware to handle preflight requests
+const allowedOriginsList = getAllowedOrigins();
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? getAllowedOrigins()
-    : true, // Allow all origins in development
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (process.env.NODE_ENV === 'production') {
+      // In production, check against allowed origins list
+      if (allowedOriginsList.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`❌ CORS blocked origin: ${origin}. Allowed origins: ${allowedOriginsList.join(', ')}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      // In development, allow all origins
+      callback(null, true);
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
+
+// Security middleware - after CORS
+app.use(securityHeaders);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
-app.use('/api/', apiLimiter);
+// Rate limiting - skip OPTIONS requests (preflight)
+app.use('/api/', (req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next(); // Skip rate limiting for OPTIONS requests
+  }
+  apiLimiter(req, res, next);
+});
 
 // Audit logging middleware
 app.use(AuditLogger.middleware());
@@ -83,7 +105,14 @@ app.use('/api/practitioner', practitionerRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    cors: {
+      allowedOrigins: getAllowedOrigins(),
+      nodeEnv: process.env.NODE_ENV
+    }
+  });
 });
 
 // 404 handler for API routes
