@@ -60,11 +60,17 @@ const corsOptions = {
     
     if (process.env.NODE_ENV === 'production') {
       // In production, check against allowed origins list
-      if (allowedOriginsList.includes(origin)) {
-        callback(null, true);
+      if (Array.isArray(allowedOriginsList) && allowedOriginsList.length > 0) {
+        if (allowedOriginsList.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.warn(`❌ CORS blocked origin: ${origin}. Allowed origins: ${allowedOriginsList.join(', ')}`);
+          callback(new Error('Not allowed by CORS'));
+        }
       } else {
-        console.warn(`❌ CORS blocked origin: ${origin}. Allowed origins: ${allowedOriginsList.join(', ')}`);
-        callback(new Error('Not allowed by CORS'));
+        // If ALLOWED_ORIGINS is not set, block all requests in production
+        console.error(`❌ CORS ERROR: ALLOWED_ORIGINS not configured in production. Blocking request from: ${origin}`);
+        callback(new Error('CORS not configured. Please set ALLOWED_ORIGINS environment variable.'));
       }
     } else {
       // In development, allow all origins
@@ -74,7 +80,9 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200
+  exposedHeaders: ['Content-Type'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 };
 app.use(cors(corsOptions));
 
