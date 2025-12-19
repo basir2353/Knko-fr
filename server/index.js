@@ -19,36 +19,43 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
 // Helper function to get allowed origins
+// Hardcoded origins ensure CORS works even if environment variables aren't set
 const getAllowedOrigins = () => {
-  if (process.env.NODE_ENV === 'production') {
-    // Debug logging to help diagnose environment variable issues
-    console.log('🔍 CORS Debug Info:');
-    console.log('  - NODE_ENV:', process.env.NODE_ENV);
-    console.log('  - ALLOWED_ORIGINS raw value:', process.env.ALLOWED_ORIGINS || '(not set)');
-    console.log('  - ALLOWED_ORIGINS type:', typeof process.env.ALLOWED_ORIGINS);
+  // Default allowed origins - hardcoded for reliability
+  const defaultOrigins = [
+    'https://knko-fr.vercel.app',  // Production frontend
+    'http://localhost:3000'        // Local development
+  ];
+  
+  // Merge with environment variable if set
+  if (process.env.ALLOWED_ORIGINS) {
+    const envOrigins = process.env.ALLOWED_ORIGINS
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(origin => origin);
     
-    const allowedOrigins = process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin)
-      : [];
-    
-    if (allowedOrigins.length === 0) {
-      console.error('❌ ERROR: ALLOWED_ORIGINS not set or empty in production!');
-      console.error('   CORS will block all requests until this is configured.');
-      console.error('   Please set ALLOWED_ORIGINS environment variable on Render.');
-      console.error('   Example: ALLOWED_ORIGINS=https://knko-fr.vercel.app');
-    } else {
-      console.log('✅ CORS allowed origins:', allowedOrigins);
-    }
-    
-    return allowedOrigins;
+    // Combine and remove duplicates
+    const allOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+    console.log('✅ CORS allowed origins:', allOrigins);
+    return allOrigins;
   }
-  return "*"; // Allow all origins in development
+  
+  // Use defaults if environment variable not set
+  if (process.env.NODE_ENV === 'production') {
+    console.log('⚠️  ALLOWED_ORIGINS not set, using default origins:', defaultOrigins);
+    console.log('   You can set ALLOWED_ORIGINS environment variable to add more origins.');
+  } else {
+    console.log('✅ CORS: Using default allowed origins:', defaultOrigins);
+  }
+  
+  return defaultOrigins;
 };
 
-// Initialize Socket.IO
+// Initialize Socket.IO with CORS
+const allowedOriginsForSocket = getAllowedOrigins();
 const io = new Server(server, {
   cors: {
-    origin: getAllowedOrigins(),
+    origin: allowedOriginsForSocket,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -61,42 +68,63 @@ app.set('io', io);
 app.set('trust proxy', 1);
 
 // CORS configuration - MUST be before other middleware to handle preflight requests
+// This handles preflight OPTIONS requests and adds CORS headers to all responses
 const allowedOriginsList = getAllowedOrigins();
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    // This is important for server-to-server communication
+    if (!origin) {
+      return callback(null, true);
+    }
     
-    if (process.env.NODE_ENV === 'production') {
-      // In production, check against allowed origins list
-      if (Array.isArray(allowedOriginsList) && allowedOriginsList.length > 0) {
-        if (allowedOriginsList.includes(origin)) {
-          callback(null, true);
-        } else {
-          console.warn(`❌ CORS blocked origin: ${origin}. Allowed origins: ${allowedOriginsList.join(', ')}`);
-          callback(new Error('Not allowed by CORS'));
-        }
-      } else {
-        // If ALLOWED_ORIGINS is not set, block all requests in production
-        console.error(`❌ CORS ERROR: ALLOWED_ORIGINS not configured in production. Blocking request from: ${origin}`);
-        callback(new Error('CORS not configured. Please set ALLOWED_ORIGINS environment variable.'));
-      }
-    } else {
-      // In development, allow all origins
+    // Check if the origin is in the allowed list
+    if (allowedOriginsList.includes(origin)) {
       callback(null, true);
+    } else {
+      console.warn(`❌ CORS blocked origin: ${origin}`);
+      console.warn(`   Allowed origins: ${allowedOriginsList.join(', ')}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS policy`));
     }
   },
-  credentials: true,
+  credentials: true,  // Allow cookies and auth headers
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Type'],
-  optionsSuccessStatus: 200,
-  preflightContinue: false
+  optionsSuccessStatus: 200,  // Return 200 for OPTIONS requests
+  preflightContinue: false     // Let CORS middleware handle preflight
 };
+
+// Apply CORS middleware to ALL routes - this must be before any other middleware
 app.use(cors(corsOptions));
 
-// Explicit OPTIONS handler as backup (in case CORS middleware doesn't catch it)
-app.options('*', cors(corsOptions));
+// Explicit OPTIONS handler as a safety net (handles preflight requests)
+// This ensures OPTIONS requests return 200 with proper headers
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  
+  // For browser preflight requests, origin will always be present
+  // If origin is present and allowed, send CORS headers
+  if (origin && allowedOriginsList.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    return res.status(200).end();
+  }
+  
+  // No origin or origin not allowed - for preflight, we should still return 200
+  // but without CORS headers (browser will block the actual request)
+  if (!origin) {
+    // Request without origin (server-to-server), just return 200
+    return res.status(200).end();
+  }
+  
+  // Origin not allowed - return 403
+  res.status(403).end();
+});
 
 // Security middleware - after CORS
 app.use(securityHeaders);
@@ -106,9 +134,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting - skip OPTIONS requests (preflight)
+// IMPORTANT: Rate limiting must come AFTER CORS middleware
 app.use('/api/', (req, res, next) => {
   if (req.method === 'OPTIONS') {
-    return next(); // Skip rate limiting for OPTIONS requests
+    // Skip rate limiting for preflight OPTIONS requests
+    return next();
   }
   apiLimiter(req, res, next);
 });
@@ -146,14 +176,22 @@ app.use('*', (req, res) => {
 });
 
 // CORS error handler - must be before secureErrorHandler to preserve CORS headers
+// This ensures CORS headers are sent even when errors occur
 app.use((err, req, res, next) => {
-  // If it's a CORS error, send proper CORS headers even in error response
-  if (err.message && err.message.includes('CORS')) {
+  // If it's a CORS error, send proper CORS headers in the error response
+  if (err.message && (err.message.includes('CORS') || err.message.includes('not allowed'))) {
     const origin = req.headers.origin;
     if (origin && allowedOriginsList.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     }
+    // Return CORS error immediately without continuing to secureErrorHandler
+    return res.status(403).json({
+      error: 'CORS policy violation',
+      message: 'Origin not allowed by CORS policy'
+    });
   }
   next(err);
 });
@@ -212,16 +250,7 @@ server.listen(PORT, () => {
   
   // Display CORS configuration on startup
   const origins = getAllowedOrigins();
-  if (process.env.NODE_ENV === 'production') {
-    if (Array.isArray(origins) && origins.length > 0) {
-      console.log(`✅ CORS configured for ${origins.length} origin(s)`);
-    } else {
-      console.log(`❌ CORS NOT CONFIGURED - All requests will be blocked!`);
-      console.log(`   Set ALLOWED_ORIGINS environment variable on Render.`);
-    }
-  } else {
-    console.log(`✅ CORS: All origins allowed (development mode)`);
-  }
+  console.log(`✅ CORS configured for ${origins.length} origin(s): ${origins.join(', ')}`);
   console.log('');
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
