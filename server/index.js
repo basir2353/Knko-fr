@@ -21,12 +21,21 @@ const PORT = process.env.PORT || 5001;
 // Helper function to get allowed origins
 const getAllowedOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
+    // Debug logging to help diagnose environment variable issues
+    console.log('🔍 CORS Debug Info:');
+    console.log('  - NODE_ENV:', process.env.NODE_ENV);
+    console.log('  - ALLOWED_ORIGINS raw value:', process.env.ALLOWED_ORIGINS || '(not set)');
+    console.log('  - ALLOWED_ORIGINS type:', typeof process.env.ALLOWED_ORIGINS);
+    
     const allowedOrigins = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin)
       : [];
     
     if (allowedOrigins.length === 0) {
-      console.warn('⚠️  WARNING: ALLOWED_ORIGINS not set in production. CORS will block all requests!');
+      console.error('❌ ERROR: ALLOWED_ORIGINS not set or empty in production!');
+      console.error('   CORS will block all requests until this is configured.');
+      console.error('   Please set ALLOWED_ORIGINS environment variable on Render.');
+      console.error('   Example: ALLOWED_ORIGINS=https://knko-fr.vercel.app');
     } else {
       console.log('✅ CORS allowed origins:', allowedOrigins);
     }
@@ -181,8 +190,23 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Socket.IO server initialized`);
+  console.log(`\n🚀 Server is running on port ${PORT}`);
+  console.log(`📡 Socket.IO server initialized`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Display CORS configuration on startup
+  const origins = getAllowedOrigins();
+  if (process.env.NODE_ENV === 'production') {
+    if (Array.isArray(origins) && origins.length > 0) {
+      console.log(`✅ CORS configured for ${origins.length} origin(s)`);
+    } else {
+      console.log(`❌ CORS NOT CONFIGURED - All requests will be blocked!`);
+      console.log(`   Set ALLOWED_ORIGINS environment variable on Render.`);
+    }
+  } else {
+    console.log(`✅ CORS: All origins allowed (development mode)`);
+  }
+  console.log('');
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n❌ Error: Port ${PORT} is already in use.`);
