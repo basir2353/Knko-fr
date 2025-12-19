@@ -18,12 +18,28 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
+// Helper function to get allowed origins
+const getAllowedOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin)
+      : [];
+    
+    if (allowedOrigins.length === 0) {
+      console.warn('⚠️  WARNING: ALLOWED_ORIGINS not set in production. CORS will block all requests!');
+    } else {
+      console.log('✅ CORS allowed origins:', allowedOrigins);
+    }
+    
+    return allowedOrigins;
+  }
+  return "*"; // Allow all origins in development
+};
+
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.ALLOWED_ORIGINS?.split(',') || []
-      : "*", // Allow all origins in development
+    origin: getAllowedOrigins(),
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -41,7 +57,7 @@ app.use(securityHeaders);
 // CORS configuration - restrict in production
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGINS?.split(',') || []
+    ? getAllowedOrigins()
     : true, // Allow all origins in development
   credentials: true,
   optionsSuccessStatus: 200
