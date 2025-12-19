@@ -36,6 +36,7 @@ const apiLimiter = rateLimit({
 /**
  * Security headers middleware
  * Uses Helmet.js for security headers
+ * Note: CORS headers are handled separately and must come before this middleware
  */
 const securityHeaders = helmet({
   contentSecurityPolicy: {
@@ -53,7 +54,10 @@ const securityHeaders = helmet({
   },
   noSniff: true,
   xssFilter: true,
-  referrerPolicy: { policy: 'no-referrer' }
+  referrerPolicy: { policy: 'no-referrer' },
+  // Don't override CORS headers
+  crossOriginResourcePolicy: false,
+  crossOriginEmbedderPolicy: false
 });
 
 /**

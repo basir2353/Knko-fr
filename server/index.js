@@ -95,6 +95,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+// Explicit OPTIONS handler as backup (in case CORS middleware doesn't catch it)
+app.options('*', cors(corsOptions));
+
 // Security middleware - after CORS
 app.use(securityHeaders);
 
@@ -140,6 +143,19 @@ app.use('/api/*', (req, res) => {
 // Catch-all handler for non-API routes
 app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
+});
+
+// CORS error handler - must be before secureErrorHandler to preserve CORS headers
+app.use((err, req, res, next) => {
+  // If it's a CORS error, send proper CORS headers even in error response
+  if (err.message && err.message.includes('CORS')) {
+    const origin = req.headers.origin;
+    if (origin && allowedOriginsList.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+  }
+  next(err);
 });
 
 // Secure error handler (must be last)
