@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './Auth.css';
 import { setToken } from '../utils/secureStorage';
 import { initSocket } from '../utils/socket';
@@ -127,9 +128,9 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
         <p className="switch-auth">
           Don't have an account?{' '}
-          <span onClick={onSwitchToSignup} className="link">
+          <Link to="/signup" className="link">
             Sign up
-          </span>
+          </Link>
         </p>
       </div>
     </div>

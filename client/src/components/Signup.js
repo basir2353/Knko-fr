@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './Auth.css';
 import { setToken } from '../utils/secureStorage';
 import { initSocket } from '../utils/socket';
@@ -203,9 +204,9 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
 
         <p className="switch-auth">
           Already have an account?{' '}
-          <span onClick={onSwitchToLogin} className="link">
+          <Link to="/login" className="link">
             Login
-          </span>
+          </Link>
         </p>
       </div>
     </div>
