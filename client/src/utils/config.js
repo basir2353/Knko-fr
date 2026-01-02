@@ -4,7 +4,7 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL || 
   (process.env.NODE_ENV === 'production' 
     ? 'https://knko-fr.onrender.com' 
-    : 'http://localhost:5001');
+    : 'https://knko-fr.onrender.com');
 
 export default {
   API_BASE_URL

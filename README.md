@@ -61,7 +61,7 @@ npm run dev
 ```
 
 This will start:
-- Backend server on `http://localhost:5001`
+- Backend server on `https://knko-fr.onrender.com`
 - Frontend React app on `http://localhost:3000`
 
 **Note:** Port 5001 is used instead of 5000 because macOS Control Center uses port 5000 by default.
